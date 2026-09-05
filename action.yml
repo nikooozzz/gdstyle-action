@@ -33,12 +33,10 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Setup Rust Toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Install gdstyle
-      shell: bash
-      run: cargo install gdstyle
+    - name: Install gdstyle Binary
+      uses: taiki-e/install-action@v2
+      with:
+        tool: gdstyle
 
     - name: Run gdstyle Auto-Fix
       if: inputs.auto-fix == 'true'

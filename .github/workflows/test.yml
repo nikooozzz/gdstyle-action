@@ -1,0 +1,18 @@
+name: Test Local Action
+
+on: [push, pull_request]
+
+jobs:
+  test-action:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Action Repo
+        uses: actions/checkout@v4
+
+      - name: Run Local Action
+        uses: ./
+        with: 
+          path: 'src/'
+          check-lint: 'true'
+          check-format: 'true'
+          post-comment: 'false'

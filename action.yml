@@ -1,0 +1,127 @@
+name: 'gdstyle-action'
+description: 'Runs gdstyle linting, formatting checks, auto-fixes, and PR summary reports'
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Target directory to check or format'
+    required: false
+    default: '.'
+  check-lint:
+    description: 'Run gdstyle lint check'
+    required: false
+    default: 'true'
+  check-format:
+    description: 'Run gdstyle format check'
+    required: false
+    default: 'true'
+  auto-fix:
+    description: 'Automatically run fixes and commit back to branch'
+    required: false
+    default: 'false'
+  commit-message:
+    description: 'Commit message for auto-fix commits'
+    required: false
+    default: 'style: auto-fix GDScript formatting'
+  post-comment:
+    description: 'Post or update a summary report comment on Pull Requests'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Rust Toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install gdstyle
+      shell: bash
+      run: cargo install gdstyle
+
+    - name: Run gdstyle Auto-Fix
+      if: inputs.auto-fix == 'true'
+      shell: bash
+      run: gdstyle fmt ${{ inputs.path }}
+
+    - name: Commit Auto-Fixes
+      if: inputs.auto-fix == 'true'
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: ${{ inputs.commit-message }}
+
+    - name: Run gdstyle Lint Check
+      if: inputs.check-lint == 'true'
+      shell: bash
+      run: gdstyle check ${{ inputs.path }} > gdstyle_lint_report.txt 2>&1 || echo "LINT_FAILED=true" >> $GITHUB_ENV
+
+    - name: Run gdstyle Format Check
+      if: inputs.check-format == 'true'
+      shell: bash
+      run: gdstyle fmt --check ${{ inputs.path }} > gdstyle_fmt_report.txt 2>&1 || echo "FMT_FAILED=true" >> $GITHUB_ENV
+
+    - name: Compose Summary Report
+      if: always()
+      shell: bash
+      run: |
+        echo "### GDScript Quality Report" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ inputs.check-lint }}" = "true" ]; then
+          echo "#### Lint Verification" >> $GITHUB_STEP_SUMMARY
+          if [ -s gdstyle_lint_report.txt ]; then
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            cat gdstyle_lint_report.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "All GDScript files passed lint checks." >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+
+        if [ "${{ inputs.check-format }}" = "true" ]; then
+          echo "#### Format Verification" >> $GITHUB_STEP_SUMMARY
+          if [ -s gdstyle_fmt_report.txt ]; then
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            cat gdstyle_fmt_report.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "All files adhere to formatting standards." >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+
+    - name: Post PR Comment
+      if: always() && inputs.post-comment == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, 'utf8');
+
+          const comments = await github.rest.issues.listComments({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          });
+
+          const botComment = comments.data.find(c => c.body.includes('### GDStyle Quality Report'));
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: summary
+            });
+          } else {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+          }
+    - name: Evaluate Exit Code
+      if: env.LINT_FAILED == 'true' || env.FMT_FAILED == 'true'
+      shell: bash
+      run: |
+        echo "gdstyle check or format failed. Review the summary or PR comment."
+        exit 1

@@ -1,0 +1,33 @@
+name: Update Tags
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  update-floating-tags:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update Floating Tags
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          MAJOR=$(echo "$TAG" | cut -d. -f1)
+          MINOR=$(echo "$TAG" | cut -d. -f1-2)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -fa "$MAJOR" -m "Update $MAJOR tag to $TAG"
+          git tag -fa "$MINOR" -m "Update $MINOR tag to $TAG"
+
+          git push origin "$MAJOR" --force
+          git push origin "$MINOR" --force

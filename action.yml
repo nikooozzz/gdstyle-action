@@ -48,6 +48,7 @@ runs:
       uses: stefanzweifel/git-auto-commit-action@v7
       with:
         commit_message: ${{ inputs.commit-message }}
+        file_pattern: '${{ inputs.path }}'
         skip_push: ${{ env.ACT == 'true' }}
 
     - name: Run gdstyle Lint Check

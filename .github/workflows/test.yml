@@ -12,12 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run actionlint
-        uses: reviewdog/action-actionlint@v1
+        shell: bash
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint
 
   test-composite-action:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Test valid GDScript check
@@ -47,17 +50,19 @@ jobs:
           fi
           echo "Action correctly caught formatting errors."
 
-      - name: Test auto-fix behavior
+      - name: Test auto-fix execution
         uses: ./
-        with: 
+        with:
           path: './test/fixtures/invalid'
           auto-fix: 'true'
           post-comment: 'false'
 
-      - name: Verify auto-fix fixed formatting
+      - name: Verify auto-fix actually formatted the file
         shell: bash
         run: |
           gdstyle fmt --check ./test/fixtures/invalid
-      
-      - name: Reset fixtures git status
+
+      - name: Revert fixture modifications for cleanliness
+        if: always()
+        shell: bash
         run: git checkout -- test/fixtures/

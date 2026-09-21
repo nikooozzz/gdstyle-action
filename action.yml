@@ -45,9 +45,10 @@ runs:
 
     - name: Commit Auto-Fixes
       if: inputs.auto-fix == 'true'
-      uses: stefanzweifel/git-auto-commit-action@v5
+      uses: stefanzweifel/git-auto-commit-action@v7
       with:
         commit_message: ${{ inputs.commit-message }}
+        skip_push: ${{ env.ACT == 'true' }}
 
     - name: Run gdstyle Lint Check
       if: inputs.check-lint == 'true'

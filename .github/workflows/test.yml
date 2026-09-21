@@ -1,18 +1,68 @@
-name: Test Local Action
+name: CI & Action Integration Tests
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  test-action:
+  lint-action:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Action Repo
+      - uses: actions/checkout@v4
+      - name: Run actionlint
+        shell: bash
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint
+
+  test-composite-action:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Local Action
+      - name: Test valid GDScript check
         uses: ./
-        with: 
-          path: 'src/'
+        with:
+          path: './test/fixtures/valid'
           check-lint: 'true'
           check-format: 'true'
           post-comment: 'false'
+
+      - name: Test invalid GDScript check expected failure
+        id: test_failure
+        continue-on-error: true
+        uses: ./
+        with:
+          path: './test/fixtures/invalid'
+          check-lint: 'true'
+          check-format: 'true'
+          post-comment: 'false'
+
+      - name: Verify failure step was triggered
+        shell: bash
+        run: |
+          if [ "${{ steps.test_failure.outcome }}" != "failure" ]; then
+            echo "Expected action to fail on broken formatting, but it passed."
+            exit 1
+          fi
+          echo "Action correctly caught formatting errors."
+
+      - name: Test auto-fix execution
+        uses: ./
+        with:
+          path: './test/fixtures/invalid'
+          auto-fix: 'true'
+          post-comment: 'false'
+
+      - name: Verify auto-fix actually formatted the file
+        shell: bash
+        run: |
+          gdstyle fmt --check ./test/fixtures/invalid
+
+      - name: Revert fixture modifications for cleanliness
+        if: always()
+        shell: bash
+        run: git checkout -- test/fixtures/

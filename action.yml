@@ -44,63 +44,81 @@ runs:
       run: gdstyle fmt ${{ inputs.path }}
 
     - name: Commit Auto-Fixes
-      if: inputs.auto-fix == 'true'
-      uses: stefanzweifel/git-auto-commit-action@v5
+      if: inputs.auto-fix == 'true' && github.repository != 'nikooozzz/gdstyle-action'
+      uses: stefanzweifel/git-auto-commit-action@v7
       with:
         commit_message: ${{ inputs.commit-message }}
+        file_pattern: '${{ inputs.path }}'
+        skip_push: ${{ env.ACT == 'true' }}
 
     - name: Run gdstyle Lint Check
       if: inputs.check-lint == 'true'
       shell: bash
       run: |
-        gdstyle check ${{ inputs.path }} > gdstyle_lint_report.txt 2>&1 
+        set +e
+        gdstyle check ${{ inputs.path }} > gdstyle_lint_report.txt 2>&1
         echo "LINT_EXIT=$?" >> $GITHUB_ENV
+        set -e
 
     - name: Run gdstyle Format Check
       if: inputs.check-format == 'true'
       shell: bash
       run: |
+        set +e
         gdstyle fmt --check ${{ inputs.path }} > gdstyle_fmt_report.txt 2>&1
         echo "FMT_EXIT=$?" >> $GITHUB_ENV
+        set -e
 
     - name: Compose Summary Report
       if: always()
       shell: bash
       run: |
-        echo "### GDScript Quality Report" >> $GITHUB_STEP_SUMMARY
+        REPORT_FILE="summary_report.md"
+        
+        echo "### GDScript Quality Report" > $REPORT_FILE
         if [ "${{ inputs.check-lint }}" = "true" ]; then
-          echo "#### Lint Verification" >> $GITHUB_STEP_SUMMARY
+          echo "#### Lint Verification" >> $REPORT_FILE
           if [ -s gdstyle_lint_report.txt ]; then
-            echo '```text' >> $GITHUB_STEP_SUMMARY
-            cat gdstyle_lint_report.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $REPORT_FILE
+            cat gdstyle_lint_report.txt >> $REPORT_FILE
+            echo '```' >> $REPORT_FILE
           else
-            echo "All GDScript files passed lint checks." >> $GITHUB_STEP_SUMMARY
+            echo "All GDScript files passed lint checks." >> $REPORT_FILE
           fi
         fi
 
         if [ "${{ inputs.check-format }}" = "true" ]; then
-          echo "#### Format Verification" >> $GITHUB_STEP_SUMMARY
+          echo "#### Format Verification" >> $REPORT_FILE
           if [ -s gdstyle_fmt_report.txt ]; then
-            echo '```text' >> $GITHUB_STEP_SUMMARY
-            cat gdstyle_fmt_report.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $REPORT_FILE
+            cat gdstyle_fmt_report.txt >> $REPORT_FILE
+            echo '```' >> $REPORT_FILE
           else
-            echo "All files adhere to formatting standards." >> $GITHUB_STEP_SUMMARY
+            echo "All files adhere to formatting standards." >> $REPORT_FILE
           fi
         fi
+
+        cat $REPORT_FILE >> $GITHUB_STEP_SUMMARY
+        
+        {
+          echo "SUMMARY_BODY<<EOF"
+          cat $REPORT_FILE
+          echo "EOF"
+        } >> $GITHUB_ENV
 
     - name: Post PR Comment
       if: inputs.post-comment == 'true' && github.event_name == 'pull_request'
       uses: peter-evans/create-or-update-comment@v4
       with:
         issue-number: ${{ github.event.pull_request.number }}
-        body: ${{ env.GITHUB_STEP_SUMMARY }}
+        body: ${{ env.SUMMARY_BODY }}
 
     - name: Evaluate Exit Code
       shell: bash
       run: |
-        if [ "${{ env.LINT_EXIT }}" -gt 0 ] || [ "${{ env.FMT_EXIT }}" -gt 0 ]; then
+        LINT="${LINT_EXIT:-0}"
+        FMT="${FMT_EXIT:-0}"
+        if [ "$LINT" -gt 0 ] || [ "$FMT" -gt 0 ]; then
           echo "gdstyle checks failed."
           exit 1
         fi

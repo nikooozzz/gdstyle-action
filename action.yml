@@ -52,12 +52,16 @@ runs:
     - name: Run gdstyle Lint Check
       if: inputs.check-lint == 'true'
       shell: bash
-      run: gdstyle check ${{ inputs.path }} > gdstyle_lint_report.txt 2>&1 || echo "LINT_FAILED=true" >> $GITHUB_ENV
+      run: |
+        gdstyle check ${{ inputs.path }} > gdstyle_lint_report.txt 2>&1 
+        echo "LINT_EXIT=$?" >> $GITHUB_ENV
 
     - name: Run gdstyle Format Check
       if: inputs.check-format == 'true'
       shell: bash
-      run: gdstyle fmt --check ${{ inputs.path }} > gdstyle_fmt_report.txt 2>&1 || echo "FMT_FAILED=true" >> $GITHUB_ENV
+      run: |
+        gdstyle fmt --check ${{ inputs.path }} > gdstyle_fmt_report.txt 2>&1
+        echo "FMT_EXIT=$?" >> $GITHUB_ENV
 
     - name: Compose Summary Report
       if: always()
@@ -87,39 +91,16 @@ runs:
         fi
 
     - name: Post PR Comment
-      if: always() && inputs.post-comment == 'true' && github.event_name == 'pull_request'
-      uses: actions/github-script@v7
+      if: inputs.post-comment == 'true' && github.event_name == 'pull_request'
+      uses: peter-evans/create-or-update-comment@v4
       with:
-        script: |
-          const fs = require('fs');
-          const summary = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, 'utf8');
+        issue-number: ${{ github.event.pull_request.number }}
+        body: ${{ env.GITHUB_STEP_SUMMARY }}
 
-          const comments = await github.rest.issues.listComments({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-          });
-
-          const botComment = comments.data.find(c => c.body.includes('### GDStyle Quality Report'));
-
-          if (botComment) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: botComment.id,
-              body: summary
-            });
-          } else {
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
-          }
     - name: Evaluate Exit Code
-      if: env.LINT_FAILED == 'true' || env.FMT_FAILED == 'true'
       shell: bash
       run: |
-        echo "gdstyle check or format failed. Review the summary or PR comment."
-        exit 1
+        if [ "${{ env.LINT_EXIT }}" -gt 0 ] || [ "${{ env.FMT_EXIT }}" -gt 0 ]; then
+          echo "gdstyle checks failed."
+          exit 1
+        fi

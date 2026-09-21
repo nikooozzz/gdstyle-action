@@ -44,7 +44,7 @@ runs:
       run: gdstyle fmt ${{ inputs.path }}
 
     - name: Commit Auto-Fixes
-      if: inputs.auto-fix == 'true'
+      if: inputs.auto-fix == 'true' && github.repository != 'nikooozzz/gdstyle-action'
       uses: stefanzweifel/git-auto-commit-action@v7
       with:
         commit_message: ${{ inputs.commit-message }}
